@@ -4,4 +4,5 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-MENSA_MENU_URL = os.getenv('MENSA_MENU_URL')
+MENSA_UNTER_MENU_URL = os.getenv('MENSA_UNTER_MENU_URL')
+MENSA_OBEN_MENU_URL = os.getenv('MENSA_OBEN_MENU_URL')
