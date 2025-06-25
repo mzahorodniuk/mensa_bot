@@ -1,0 +1,15 @@
+{
+  "name": "mensa_telegram_bot",
+  "version": "1.0.0",
+  "description": "A Telegram bot that sends the Mensa menu.",
+  "main": "src/bot.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/bot.js"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "telegraf": "^4.12.2",
+    "dotenv": "^16.4.5"
+  }
+}
