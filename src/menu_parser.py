@@ -2,6 +2,26 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 
+# Map logo image filenames or alt/title to emojis
+LOGO_EMOJI_MAP = {
+    'Geflügel': '🍗',
+    'Schwein': '🐖',
+    'Rind': '🐄',
+    'vegan': '🌱',
+    'vegetarisch': '🥦',
+    'Suppe': '🥣',
+    'Fisch': '🐟',
+    'Knoblauch': '🧄',
+    'CO2 Stufe A': '🟢',
+    'CO2 Stufe B': '🟡',
+    'CO2 Stufe C': '🟠',
+    'CO2 Stufe D': '🔴',
+    'H2O Stufe A': '💧',
+    'H2O Stufe B': '💦',
+    'H2O Stufe C': '🌊',
+    'H2O Stufe D': '🚱',
+}
+
 def fetch_menu_for_day(url, day: str = 'today'):
     response = requests.get(url)
     response.raise_for_status()
@@ -37,17 +57,28 @@ def fetch_menu_for_day(url, day: str = 'today'):
                 grau_span = tds[0].find('span', class_='grau')
                 if grau_span:
                     english = grau_span.get_text(separator=' ', strip=True)
+                # Find logo(s) in tds[1] (icons)
+                emojis = ''
+                if len(tds) > 1:
+                    for img in tds[1].find_all('img'):
+                        alt = img.get('alt', '').lower()
+                        title = img.get('title', '').lower()
+                        for key, emoji in LOGO_EMOJI_MAP.items():
+                            if key.lower() in alt or key.lower() in title:
+                                emojis += emoji
                 if main_text:
-                    menu_items.append({'text': main_text, 'english': english, 'price': price})
+                    menu_items.append({'text': main_text, 'english': english, 'price': price, 'emojis': emojis})
             break
     return menu_items
 
-def format_menu_message(mensa_location,menu_items, day_label):
+def format_menu_message(mensa_location, menu_items, day_label):
     if not menu_items:
         return f'No menu found for {day_label}.'
     msg = f'<b>Mensa {mensa_location} Menu for {day_label}:</b>\n\n'
     for item in menu_items:
-        msg += f'• <b>{item["text"]}</b>'
+        if item['emojis']:
+            msg += f'• {item["emojis"]}'
+        msg += f' <b>{item["text"]}</b>'
         if item['english']:
             msg += f'\n{item["english"]}'
         if item['price']:
