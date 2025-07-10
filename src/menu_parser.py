@@ -1,6 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
+import threading
+import time
 
 # Map logo image filenames or alt/title to emojis
 LOGO_EMOJI_MAP = {
@@ -21,6 +23,9 @@ LOGO_EMOJI_MAP = {
     'H2O Stufe C': '🌊',
     'H2O Stufe D': '🚱',
 }
+
+# In-memory cache for tomorrow's menu
+menu_cache = {'tomorrow': None, 'tomorrow_date': None}
 
 def fetch_menu_for_day(url, day: str = 'today'):
     response = requests.get(url)
@@ -85,3 +90,33 @@ def format_menu_message(mensa_location, menu_items, day_label):
             msg += f'\n<i>{item["price"]}</i>'
         msg += '\n\n'
     return msg
+
+# Patch fetch_menu_for_day to use cache for 'tomorrow'
+def fetch_menu_for_day_with_cache(url, day: str = 'today'):
+    if day == 'tomorrow':
+        tomorrow = (datetime.now() + timedelta(days=1)).strftime('%d.%m.%Y')
+        if menu_cache['tomorrow'] and menu_cache['tomorrow_date'] == tomorrow:
+            return menu_cache['tomorrow']
+        else:
+            fetch_and_cache_tomorrow_menu(url)
+            return menu_cache['tomorrow']
+    else:
+        return fetch_menu_for_day(url, day)
+
+def fetch_and_cache_tomorrow_menu(url):
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime('%d.%m.%Y')
+    menu_items = fetch_menu_for_day(url, 'tomorrow')
+    menu_cache['tomorrow'] = menu_items
+    menu_cache['tomorrow_date'] = tomorrow
+
+def schedule_tomorrow_menu_update(url):
+    def update_loop():
+        while True:
+            fetch_and_cache_tomorrow_menu(url)
+            # Sleep until next day (update at 3am)
+            now = datetime.now()
+            next_update = (now + timedelta(days=1)).replace(hour=3, minute=0, second=0, microsecond=0)
+            sleep_seconds = (next_update - now).total_seconds()
+            time.sleep(max(sleep_seconds, 3600))
+    thread = threading.Thread(target=update_loop, daemon=True)
+    thread.start()

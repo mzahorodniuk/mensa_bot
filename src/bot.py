@@ -6,9 +6,12 @@ import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 import telegram
-from config.config import TELEGRAM_BOT_TOKEN, MENSA_UNTER_MENU_URL, MENSA_OBEN_MENU_URL
-from src.menu_parser import fetch_menu_for_day, format_menu_message
+from config.config import TELEGRAM_BOT_TOKEN, MENSA_UNTER_MENU_URL, MENSA_OBEN_MENU_URL, ADMIN_USER_ID
+from src.menu_parser import fetch_menu_for_day_with_cache as fetch_menu_for_day, format_menu_message, schedule_tomorrow_menu_update
 
+# Global variable to count user requests
+request_count = 0
+ADMIN_USER_ID=int(ADMIN_USER_ID)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
@@ -50,6 +53,8 @@ async def send_location_buttons(chat_or_query, day, day_label, show_as_edit=Fals
         await chat_or_query.reply_text(text, reply_markup=reply_markup)
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global request_count
+    request_count += 1
     # For /menu, just show the day selection buttons
     keyboard = [
         [
@@ -63,7 +68,18 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
+async def activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_USER_ID:
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
+    await update.message.reply_text(f"Total user requests: {request_count}")
+
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"Your Telegram user ID is: {update.effective_user.id}")
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global request_count
+    request_count += 1
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -136,9 +152,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
+    # Start background cache update for both locations
+    schedule_tomorrow_menu_update(MENSA_OBEN_MENU_URL)
+    schedule_tomorrow_menu_update(MENSA_UNTER_MENU_URL)
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('menu', menu))
+    app.add_handler(CommandHandler('activity', activity))
+    app.add_handler(CommandHandler('myid', myid))
     app.add_handler(CallbackQueryHandler(button))
     app.run_polling()
 
