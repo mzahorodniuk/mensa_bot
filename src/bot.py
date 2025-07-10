@@ -7,7 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 import telegram
 from config.config import TELEGRAM_BOT_TOKEN, MENSA_UNTER_MENU_URL, MENSA_OBEN_MENU_URL, ADMIN_USER_ID
-from src.menu_parser import fetch_menu_for_day_with_cache as fetch_menu_for_day, format_menu_message, schedule_tomorrow_menu_update
+from src.menu_parser import fetch_menu_for_day_with_cache as fetch_menu_for_day, format_menu_message, schedule_menu_update
 
 # Global variable to count user requests
 request_count = 0
@@ -153,8 +153,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     # Start background cache update for both locations
-    schedule_tomorrow_menu_update(MENSA_OBEN_MENU_URL)
-    schedule_tomorrow_menu_update(MENSA_UNTER_MENU_URL)
+    schedule_menu_update(MENSA_OBEN_MENU_URL)
+    schedule_menu_update(MENSA_UNTER_MENU_URL)
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('menu', menu))
