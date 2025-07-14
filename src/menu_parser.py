@@ -24,13 +24,8 @@ LOGO_EMOJI_MAP = {
     'H2O Stufe D': '🚱',
 }
 
-# In-memory cache for today and tomorrow's menu
-menu_cache = {
-    'today': None,
-    'today_date': None,
-    'tomorrow': None,
-    'tomorrow_date': None
-}
+# In-memory cache for today and tomorrow's menu, per URL
+menu_cache = {}
 
 def fetch_menu_for_day(url, day: str = 'today'):
     response = requests.get(url)
@@ -99,19 +94,27 @@ def format_menu_message(mensa_location, menu_items, day_label):
 def fetch_and_cache_menus(url):
     today = datetime.now().strftime('%d.%m.%Y')
     tomorrow = (datetime.now() + timedelta(days=1)).strftime('%d.%m.%Y')
+    if url not in menu_cache:
+        menu_cache[url] = {
+            'today': None,
+            'today_date': None,
+            'tomorrow': None,
+            'tomorrow_date': None
+        }
+    cache = menu_cache[url]
     # If tomorrow is now today, move cache
-    if menu_cache['tomorrow_date'] == today:
-        menu_cache['today'] = menu_cache['tomorrow']
-        menu_cache['today_date'] = today
-        menu_cache['tomorrow'] = None
-        menu_cache['tomorrow_date'] = None
+    if cache['tomorrow_date'] == today:
+        cache['today'] = cache['tomorrow']
+        cache['today_date'] = today
+        cache['tomorrow'] = None
+        cache['tomorrow_date'] = None
     # Always fetch and cache tomorrow
-    menu_cache['tomorrow'] = fetch_menu_for_day(url, 'tomorrow')
-    menu_cache['tomorrow_date'] = tomorrow
+    cache['tomorrow'] = fetch_menu_for_day(url, 'tomorrow')
+    cache['tomorrow_date'] = tomorrow
     # If today is not cached, fetch it
-    if menu_cache['today_date'] != today:
-        menu_cache['today'] = fetch_menu_for_day(url, 'today')
-        menu_cache['today_date'] = today
+    if cache['today_date'] != today:
+        cache['today'] = fetch_menu_for_day(url, 'today')
+        cache['today_date'] = today
 
 def schedule_menu_update(url):
     def update_loop():
@@ -128,17 +131,20 @@ def schedule_menu_update(url):
 def fetch_menu_for_day_with_cache(url, day: str = 'today'):
     today = datetime.now().strftime('%d.%m.%Y')
     tomorrow = (datetime.now() + timedelta(days=1)).strftime('%d.%m.%Y')
+    if url not in menu_cache:
+        fetch_and_cache_menus(url)
+    cache = menu_cache[url]
     if day == 'today':
-        if menu_cache['today'] and menu_cache['today_date'] == today:
-            return menu_cache['today']
+        if cache['today'] and cache['today_date'] == today:
+            return cache['today']
         else:
             fetch_and_cache_menus(url)
-            return menu_cache['today']
+            return menu_cache[url]['today']
     elif day == 'tomorrow':
-        if menu_cache['tomorrow'] and menu_cache['tomorrow_date'] == tomorrow:
-            return menu_cache['tomorrow']
+        if cache['tomorrow'] and cache['tomorrow_date'] == tomorrow:
+            return cache['tomorrow']
         else:
             fetch_and_cache_menus(url)
-            return menu_cache['tomorrow']
+            return menu_cache[url]['tomorrow']
     else:
         return fetch_menu_for_day(url, day)
