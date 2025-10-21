@@ -1,7 +1,8 @@
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
+import azure.functions as func
+import logging
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
@@ -10,12 +11,14 @@ from config.config import TELEGRAM_BOT_TOKEN, MENSA_UNTER_MENU_URL, MENSA_OBEN_M
 from src.menu_parser import fetch_menu_for_day_with_cache as fetch_menu_for_day, format_menu_message, schedule_menu_update
 import sentry_sdk
 
+# sentry_sdk
 sentry_sdk.init(
     dsn="https://3dabe0ac5c67ed866c3099d2477b2be6@o4510217887219712.ingest.de.sentry.io/4510217893314640",
     # Add data like request headers and IP for users,
     # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
     send_default_pii=True,
 )
+
 # Global variable to count user requests
 request_count = 0
 ADMIN_USER_ID=int(ADMIN_USER_ID)
