@@ -1,6 +1,7 @@
 import azure.functions as func
 import logging
 import json
+import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from config.config import TELEGRAM_BOT_TOKEN
@@ -10,18 +11,34 @@ from config.config import MENSA_OBEN_MENU_URL, MENSA_UNTER_MENU_URL
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 # Initialize the bot application
-telegram_app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+telegram_app = None
+app_initialized = False
 
-# Add handlers
-telegram_app.add_handler(CommandHandler('start', start))
-telegram_app.add_handler(CommandHandler('menu', menu))
-telegram_app.add_handler(CommandHandler('activity', activity))
-telegram_app.add_handler(CommandHandler('myid', myid))
-telegram_app.add_handler(CallbackQueryHandler(button))
-
-# Start background cache update for both locations (runs once when function app initializes)
-schedule_menu_update(MENSA_OBEN_MENU_URL)
-schedule_menu_update(MENSA_UNTER_MENU_URL)
+async def get_application():
+    """Get or create the initialized Telegram application."""
+    global telegram_app, app_initialized
+    
+    if telegram_app is None:
+        telegram_app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+        
+        # Add handlers
+        telegram_app.add_handler(CommandHandler('start', start))
+        telegram_app.add_handler(CommandHandler('menu', menu))
+        telegram_app.add_handler(CommandHandler('activity', activity))
+        telegram_app.add_handler(CommandHandler('myid', myid))
+        telegram_app.add_handler(CallbackQueryHandler(button))
+    
+    if not app_initialized:
+        await telegram_app.initialize()
+        await telegram_app.start()
+        app_initialized = True
+        
+        # Start background cache update for both locations
+        schedule_menu_update(MENSA_OBEN_MENU_URL)
+        schedule_menu_update(MENSA_UNTER_MENU_URL)
+        logging.info("Telegram application initialized successfully")
+    
+    return telegram_app
 
 @app.route(route="webhook", methods=["POST"])
 async def telegram_webhook(req: func.HttpRequest) -> func.HttpResponse:
@@ -32,15 +49,18 @@ async def telegram_webhook(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Telegram webhook triggered.')
     
     try:
+        # Get or initialize the Telegram application
+        app = await get_application()
+        
         # Get the JSON payload from Telegram
         req_body = req.get_json()
         logging.info(f"Received update: {req_body}")
         
         # Create Update object from JSON
-        update = Update.de_json(req_body, telegram_app.bot)
+        update = Update.de_json(req_body, app.bot)
         
         # Process the update
-        await telegram_app.process_update(update)
+        await app.process_update(update)
         
         return func.HttpResponse("OK", status_code=200)
     
