@@ -148,3 +148,4 @@ def fetch_menu_for_day_with_cache(url, day: str = 'today'):
             return menu_cache[url]['tomorrow']
     else:
         return fetch_menu_for_day(url, day)
+    
