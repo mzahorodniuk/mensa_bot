@@ -11,35 +11,20 @@ from config.config import MENSA_OBEN_MENU_URL, MENSA_UNTER_MENU_URL
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
-# Initialize the bot application
-telegram_app = None
-app_initialized = False
+# Warm the menu cache once per worker process.
+schedule_menu_update(MENSA_OBEN_MENU_URL)
+schedule_menu_update(MENSA_UNTER_MENU_URL)
 
-async def get_application():
-    """Get or create the initialized Telegram application."""
-    global telegram_app, app_initialized
-    
-    if telegram_app is None:
-        telegram_app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-        
-        # Add handlers
-        telegram_app.add_handler(CommandHandler('start', start))
-        telegram_app.add_handler(CommandHandler('menu', menu))
-        telegram_app.add_handler(CommandHandler('activity', activity))
-        telegram_app.add_handler(CommandHandler('myid', myid))
-        telegram_app.add_handler(CallbackQueryHandler(button))
-    
-    if not app_initialized:
-        await telegram_app.initialize()
-        await telegram_app.start()
-        app_initialized = True
-        
-        # Start background cache update for both locations
-        schedule_menu_update(MENSA_OBEN_MENU_URL)
-        schedule_menu_update(MENSA_UNTER_MENU_URL)
-        logging.info("Telegram application initialized successfully")
-    
+
+def build_application():
+    telegram_app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    telegram_app.add_handler(CommandHandler('start', start))
+    telegram_app.add_handler(CommandHandler('menu', menu))
+    telegram_app.add_handler(CommandHandler('activity', activity))
+    telegram_app.add_handler(CommandHandler('myid', myid))
+    telegram_app.add_handler(CallbackQueryHandler(button))
     return telegram_app
+
 
 @app.route(route="webhook", methods=["POST"])
 async def telegram_webhook(req: func.HttpRequest) -> func.HttpResponse:
@@ -48,30 +33,30 @@ async def telegram_webhook(req: func.HttpRequest) -> func.HttpResponse:
     Set your webhook URL to: https://<your-function-app>.azurewebsites.net/api/webhook
     """
     logging.info('Telegram webhook triggered.')
-    
+
     try:
-        # Get or initialize the Telegram application
-        app = await get_application()
-        
-        # Get the JSON payload from Telegram
         req_body = req.get_json()
-        logging.info(f"Received update: {req_body}")
-        
-        # Create Update object from JSON
-        update = Update.de_json(req_body, app.bot)
-        
-        # Process the update
-        await app.process_update(update)
-        
-        return func.HttpResponse("OK", status_code=200)
-    
     except ValueError as e:
         logging.error(f"Invalid JSON: {e}")
         return func.HttpResponse("Invalid request", status_code=400)
-    
+
+    # Build and initialize a fresh Application bound to the current event loop.
+    # Azure Functions starts a new asyncio loop per invocation, so caching the
+    # Application across calls leaves ExtBot's HTTP client bound to a dead loop.
+    telegram_app = build_application()
+    try:
+        await telegram_app.initialize()
+        update = Update.de_json(req_body, telegram_app.bot)
+        await telegram_app.process_update(update)
+        return func.HttpResponse("OK", status_code=200)
     except Exception as e:
-        logging.error(f"Error processing update: {e}")
+        logging.exception(f"Error processing update: {e}")
         return func.HttpResponse("Internal server error", status_code=500)
+    finally:
+        try:
+            await telegram_app.shutdown()
+        except Exception:
+            logging.exception("Error during telegram_app.shutdown()")
 
 
 @app.route(route="health", methods=["GET"])
