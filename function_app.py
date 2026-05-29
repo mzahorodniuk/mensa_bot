@@ -5,21 +5,27 @@ import asyncio
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-from config.config import TELEGRAM_BOT_TOKEN
-from src.bot import start, menu, activity, myid, button, schedule_menu_update
-from config.config import MENSA_OBEN_MENU_URL, MENSA_UNTER_MENU_URL
+from config.config import TELEGRAM_BOT_TOKEN, LOCATIONS
+from src.bot import (
+    start, menu, help_command, activity, myid, button,
+    schedule_menu_update, set_my_commands,
+)
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
-# Warm the menu cache once per worker process.
-schedule_menu_update(MENSA_OBEN_MENU_URL)
-schedule_menu_update(MENSA_UNTER_MENU_URL)
+# Warm the menu cache once per worker process for every location.
+for _loc in LOCATIONS:
+    schedule_menu_update(_loc['url'])
+
+# Register the Telegram command menu once per worker process.
+_commands_set = False
 
 
 def build_application():
     telegram_app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     telegram_app.add_handler(CommandHandler('start', start))
     telegram_app.add_handler(CommandHandler('menu', menu))
+    telegram_app.add_handler(CommandHandler('help', help_command))
     telegram_app.add_handler(CommandHandler('activity', activity))
     telegram_app.add_handler(CommandHandler('myid', myid))
     telegram_app.add_handler(CallbackQueryHandler(button))
@@ -46,6 +52,10 @@ async def telegram_webhook(req: func.HttpRequest) -> func.HttpResponse:
     telegram_app = build_application()
     try:
         await telegram_app.initialize()
+        global _commands_set
+        if not _commands_set:
+            await set_my_commands(telegram_app.bot)
+            _commands_set = True
         update = Update.de_json(req_body, telegram_app.bot)
         await telegram_app.process_update(update)
         return func.HttpResponse("OK", status_code=200)
